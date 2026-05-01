@@ -28,5 +28,5 @@ resource "random_string" "suffix" {
   upper   = false
   lower   = true
   special = false
-  
+
 }
