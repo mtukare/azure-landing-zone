@@ -14,11 +14,19 @@ resource "azurerm_resource_group" "main" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                        = "kv-portfolio-${var.env}"
+  name                        = "kv-portfolio-${var.env}-${random_string.suffix.result}"
   resource_group_name         = azurerm_resource_group.main.name
   location                    = var.location
   sku_name                    = "standard"
   tenant_id                   = data.azurerm_client_config.current.tenant_id
   enabled_for_disk_encryption = true
   purge_protection_enabled    = false
+}
+
+resource "random_string" "suffix" {
+  length  = 6
+  upper   = false
+  lower   = true
+  special = false
+  
 }
