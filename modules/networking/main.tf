@@ -25,6 +25,15 @@ resource "azurerm_subnet" "db" {
 }
 
 #Network security group for  subnet
+resource "azurerm_network_security_group" "main" {
+  name                = "nsg-${var.environment}"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+  
+}
+
+# Add your security rules here as needed
 resource "azurerm_network_security_rule" "allow_http" {
   name                        = "AllowHTTP"
   priority                    = 100
