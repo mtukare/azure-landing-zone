@@ -11,7 +11,7 @@ resource "azurerm_resource_group" "main" {
   name     = "rg-portfolio-${var.env}"
   location = var.location
 
-tags = {
+  tags = {
     environment = var.env
   }
 }
