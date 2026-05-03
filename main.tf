@@ -10,7 +10,7 @@ module "networking" {
 resource "azurerm_resource_group" "main" {
   name     = "rg-portfolio-${var.env}"
   location = var.location
-  
+
 }
 
 resource "azurerm_key_vault" "main" {
