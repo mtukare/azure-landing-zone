@@ -1,12 +1,16 @@
+name: Terraform + Portfolio Site
+
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:   # 👈 allows manual trigger (used for destroy)
 
 jobs:
-  terraform:
+  plan:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -16,9 +20,44 @@ jobs:
       - run: terraform init
       - run: terraform fmt -check
       - run: terraform validate
-      - name: Plan (PR only)
-        if: github.event_name == 'pull_request'
+      - name: Terraform Plan
         run: terraform plan -no-color
-      - name: Apply (main only)
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
+
+  apply:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - run: terraform init
+      - run: terraform apply -auto-approve
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: apply   # only run after infra apply succeeds
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Upload site files
+        run: |
+          az storage blob upload-batch \
+            --account-name stportfolioXXXX \
+            --destination '$web' \
+            --source ./site/
+
+  destroy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'   # 👈 manual trigger only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - run: terraform init
+      - run: terraform destroy -auto-approve
