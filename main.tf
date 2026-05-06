@@ -24,6 +24,8 @@ resource "azurerm_key_vault" "main" {
 
   tags = {
     environment = var.env
+    team        = "portfolio"
+
   }
 }
 
