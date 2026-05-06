@@ -21,6 +21,10 @@ resource "azurerm_key_vault" "main" {
   tenant_id                   = data.azurerm_client_config.current.tenant_id
   enabled_for_disk_encryption = true
   purge_protection_enabled    = false
+
+  tags = {
+    environment = var.env
+  }
 }
 
 resource "random_string" "suffix" {
