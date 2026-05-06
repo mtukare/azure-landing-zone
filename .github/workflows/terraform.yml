@@ -1,11 +1,11 @@
+name: Terraform Deploy
+
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [dev, staging, main]
 
 jobs:
-  terraform:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,25 +13,26 @@ jobs:
       - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - run: terraform init
-      - run: terraform fmt -check
-      - run: terraform validate
-      - name: Plan (PR only)
-        if: github.event_name == 'pull_request'
-        run: terraform plan -no-color
-      - name: Apply (main only)
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
 
+      - name: Set environment
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "ENV=prod" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "ENV=staging" >> $GITHUB_ENV
+          else
+            echo "ENV=dev" >> $GITHUB_ENV
 
-        jobs:
-  infra:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - run: terraform init
-      - run: terraform apply -auto-approve
+      - name: Select workspace
+        run: terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
+
+      - name: Init
+        run: terraform init
+
+      - name: Fmt & Validate
+        run: |
+          terraform fmt -check
+          terraform validate
+
+      - name: Apply
+        run: terraform apply -var-file=envs/${{ env.ENV }}.tfvars -auto-approve
