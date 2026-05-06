@@ -16,12 +16,13 @@ jobs:
 
       - name: Set environment
         run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          if [ "${GITHUB_REF}" == "refs/heads/main" ]; then
             echo "ENV=prod" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+          elif [ "${GITHUB_REF}" == "refs/heads/staging" ]; then
             echo "ENV=staging" >> $GITHUB_ENV
           else
             echo "ENV=dev" >> $GITHUB_ENV
+          fi
 
       - name: Select workspace
         run: terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
