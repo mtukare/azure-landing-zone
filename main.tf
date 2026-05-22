@@ -14,7 +14,7 @@ module "networking" {
 }
 resource "random_id" "kv_suffix" {
   byte_length = 4
-  
+
 }
 
 
