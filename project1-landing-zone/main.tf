@@ -19,7 +19,7 @@ module "networking" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                = "kv-portfolio-${var.environment}"
+  name                = "kv-portfolio-${random_id.kv_suffix.hex}"
   location            = var.location
   resource_group_name = azurerm_resource_group.landing_zone.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
