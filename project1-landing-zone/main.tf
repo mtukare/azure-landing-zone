@@ -25,10 +25,7 @@ resource "azurerm_key_vault" "main" {
   tenant_id           = data.azurerm_client_config.current.tenant_id
   sku_name            = "standard"
 
-  tags = {
-    environment = var.environment
-    project     = "landing-zone"
-  }
+
 }
 
 
