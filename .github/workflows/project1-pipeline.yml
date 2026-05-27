@@ -26,6 +26,7 @@ on:
       - ".github/workflows/project1-pipeline.yml"
       - ".github/workflows/terraform-reusable.yml"
 permissions:
+  id-token: write
   contents: read
   pull-requests: write
   
