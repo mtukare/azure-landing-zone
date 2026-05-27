@@ -2,6 +2,10 @@ resource "azurerm_resource_group" "landing_zone" {
   name     = "rg-landing-zone"
   location = var.location
 
+  tags = {
+    environment = "landing-zone"
+  }
+
 }
 
 

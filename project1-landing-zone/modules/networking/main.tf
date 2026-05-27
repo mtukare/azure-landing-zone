@@ -1,7 +1,7 @@
 #Virtual network
 resource "azurerm_virtual_network" "main" {
   name                = "vnet-${var.environment}"
-  address_space       = var.vnet_address_space  # Fixed: removed quotes
+  address_space       = var.vnet_address_space # Fixed: removed quotes
   location            = var.location
   resource_group_name = var.resource_group_name
 }
@@ -30,7 +30,7 @@ resource "azurerm_network_security_group" "main" {
   location            = var.location
   resource_group_name = var.resource_group_name
 
-  
+
 }
 
 # Add your security rules here as needed
