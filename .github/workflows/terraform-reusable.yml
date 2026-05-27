@@ -1,0 +1,260 @@
+# ============================================================
+# .github/workflows/_terraform-reusable.yml
+#
+# THE ENGINE — contains all Terraform CI/CD logic.
+# NOT triggered directly. Called by each project's pipeline.
+#
+# Flow:
+#   validate (always) → plan (PR only) → apply (merge to main)
+# ============================================================
+
+name: Terraform Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: "Human-readable label shown in GitHub Actions UI"
+        required: true
+        type: string
+      working_directory:
+        description: "Path to the project Terraform folder from repo root"
+        required: true
+        type: string
+      backend_key:
+        description: "Unique tfstate filename for this project in Azure Blob"
+        required: true
+        type: string
+      terraform_version:
+        description: "Terraform CLI version to install on the runner"
+        required: false
+        type: string
+        default: "1.7.5"   # change once here → applies to ALL projects
+
+    secrets:
+      ARM_CLIENT_ID:
+        required: true
+      ARM_CLIENT_SECRET:
+        required: true
+      ARM_SUBSCRIPTION_ID:
+        required: true
+      ARM_TENANT_ID:
+        required: true
+      BACKEND_RESOURCE_GROUP:
+        required: true
+      BACKEND_STORAGE_ACCOUNT:
+        required: true
+      BACKEND_CONTAINER:
+        required: true
+
+# Allow posting plan output as a PR comment
+permissions:
+  contents: read
+  pull-requests: write
+
+# ─────────────────────────────────────────────────────────────
+# JOB 1 — VALIDATE
+# Runs on every push and PR. No Azure login needed.
+# Catches formatting and syntax errors before anything touches Azure.
+# ─────────────────────────────────────────────────────────────
+jobs:
+  validate:
+    name: "[${{ inputs.project_name }}] Validate"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform ${{ inputs.terraform_version }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Init (no backend — syntax check only)
+        run: terraform init -backend=false
+        # Skips Azure connection — we only need local syntax validation here.
+        # Much faster and doesn't need secrets.
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        # Fails if any .tf file isn't properly formatted.
+        # To auto-fix locally: run `terraform fmt -recursive` in the project folder.
+
+      - name: Terraform Validate
+        run: terraform validate
+        # Checks references, variable types, required arguments, and resource logic.
+        # Catches errors like missing required variables or wrong attribute names.
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2 — PLAN
+  # Runs on Pull Requests only.
+  # Connects to Azure, shows what WILL change before it changes.
+  # Output is posted as a collapsible comment on the PR.
+  # ─────────────────────────────────────────────────────────────
+  plan:
+    name: "[${{ inputs.project_name }}] Plan"
+    runs-on: ubuntu-latest
+    needs: validate                           # only runs if validate passed
+    if: github.event_name == 'pull_request'
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform ${{ inputs.terraform_version }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (with remote backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ inputs.backend_key }}"
+        # Connects to your Azure Blob remote state.
+        # Each project uses its own unique key (filename) in the same container.
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -detailed-exitcode -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        # -no-color        : clean output without terminal color codes
+        # -detailed-exitcode: exit 0=no changes, 1=error, 2=changes present
+        # -out=tfplan      : saves binary plan (ensures apply uses same plan)
+        # tee              : shows output in logs AND saves to file for the PR comment
+        continue-on-error: true   # don't stop — we still want to post the comment
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Post Plan as PR Comment
+        uses: actions/github-script@v7
+        if: always()   # post even if plan failed — you need to see the error
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '${{ inputs.working_directory }}/plan_output.txt';
+
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync(path, 'utf8');
+            } catch (e) {
+              planOutput = 'Could not read plan output file.';
+            }
+
+            // GitHub PR comments have a ~65KB limit — truncate if needed
+            const maxLen = 60000;
+            const truncated = planOutput.length > maxLen
+              ? planOutput.substring(0, maxLen) + '\n\n... ⚠️ Output truncated (too large)'
+              : planOutput;
+
+            const exitCode = '${{ steps.plan.outputs.exit_code }}';
+            const statusIcon = exitCode === '0' ? '✅ No changes' 
+                             : exitCode === '2' ? '⚠️ Changes detected'
+                             : '❌ Plan failed';
+
+            const body = [
+              `## 🏗️ Terraform Plan — \`${{ inputs.project_name }}\``,
+              `**Status:** ${statusIcon}`,
+              `**Commit:** \`${{ github.sha }}\``,
+              '',
+              '<details>',
+              '<summary>📋 Click to expand plan output</summary>',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '</details>'
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail if plan errored
+        if: steps.plan.outputs.exit_code == '1'
+        run: exit 1
+        # Now we fail the job — AFTER the comment was posted so you can see why
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3 — APPLY
+  # Runs ONLY when a PR is merged into main.
+  # This is the job that actually changes your Azure infrastructure.
+  # ─────────────────────────────────────────────────────────────
+  apply:
+    name: "[${{ inputs.project_name }}] Apply"
+    runs-on: ubuntu-latest
+    needs: validate                           # validate must pass first
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Double guard: must be main branch AND a push event (not a PR event)
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform ${{ inputs.terraform_version }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (with remote backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ inputs.backend_key }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -no-color
+        # -auto-approve : skips interactive "yes" prompt (required in CI — no human to type it)
+        # -no-color     : prevents garbled escape characters in GitHub Actions logs
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
