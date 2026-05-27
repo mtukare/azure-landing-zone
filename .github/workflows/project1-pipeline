@@ -1,0 +1,43 @@
+# ============================================================
+# .github/workflows/project1-pipeline.yml
+#
+# Project 01 — Azure Landing Zone (full IaC)
+# Triggers when files change inside: project1-landing-zone/
+#
+# What this project provisions:
+#   Resource Group, VNet + Subnets, NSG, Storage Account, Key Vault
+# ============================================================
+
+name: "Project01 — Landing Zone"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project1-landing-zone/**"                     # any file inside project1 folder
+      - ".github/workflows/project1-pipeline.yml"      # or if this workflow file itself changes
+      - ".github/workflows/_terraform-reusable.yml"    # or if the shared engine changes
+
+  pull_request:
+    branches: [main]
+    paths:
+      - "project1-landing-zone/**"
+      - ".github/workflows/project1-pipeline.yml"
+      - ".github/workflows/_terraform-reusable.yml"
+
+jobs:
+  terraform:
+    name: "Terraform CI/CD"
+    uses: ./.github/workflows/_terraform-reusable.yml    # calls the shared engine
+    with:
+      project_name: "Project01 - Landing Zone"
+      working_directory: "project1-landing-zone"
+      backend_key: "project1-landing-zone.tfstate"       # unique state file per project
+    secrets:
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      BACKEND_RESOURCE_GROUP: ${{ secrets.BACKEND_RESOURCE_GROUP }}
+      BACKEND_STORAGE_ACCOUNT: ${{ secrets.BACKEND_STORAGE_ACCOUNT }}
+      BACKEND_CONTAINER: ${{ secrets.BACKEND_CONTAINER }}
