@@ -1,0 +1,88 @@
+# ================================================================
+# .github/workflows/project3-deploy.yml
+#
+# PROJECT 3 — Portfolio Static Site (CONTENT DEPLOY)
+# Uploads HTML/CSS/JS files to Azure Blob Storage on every push.
+#
+# WHEN does this run?
+#   - Push to main AND site files changed → upload to blob
+#
+# WHEN does this NOT run?
+#   - Changing .tf files  → that's project3-infra.yml's job
+#   - Changing other projects → paths filter prevents this
+#   - Pull Requests → content deploy only happens on main
+#
+# IMPORTANT: Run project3-infra.yml FIRST at least once to create
+# the Storage Account before this workflow can upload files to it.
+# ================================================================
+
+name: "Project03 — Portfolio Site (Deploy)"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project3-monitoring/site/**"            # any HTML/CSS/JS file change
+      - ".github/workflows/project3-deploy.yml"  # or if this workflow changes
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1 — DEPLOY SITE FILES
+  # Uploads everything in project3-monitoring/site/ to the
+  # $web container in your Azure Storage Account.
+  # The $web container is what Azure uses for static website hosting.
+  # ──────────────────────────────────────────────────────────────
+  deploy:
+    name: "Upload Site to Azure Blob"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        # Authenticates to Azure so we can run az storage commands
+
+      - name: Upload site files to Azure Blob
+        run: |
+          az storage blob upload-batch \
+            --account-name ${{ secrets.PORTFOLIO_STORAGE_ACCOUNT }} \
+            --destination '$web' \
+            --source ./project3-monitoring/site/ \
+            --overwrite true
+        # --account-name   : your storage account name (set as a GitHub secret)
+        # --destination    : '$web' is the SPECIAL container Azure creates for
+        #                    static websites — this is NOT a regular blob container
+        # --source         : the local folder containing your HTML/CSS/JS files
+        # --overwrite true : replace existing files (for re-deploys to work)
+
+      - name: Purge CDN cache
+        run: |
+          az cdn endpoint purge \
+            --resource-group ${{ secrets.BACKEND_RESOURCE_GROUP }} \
+            --profile-name cdn-portfolio \
+            --name portfolio-endpoint \
+            --content-paths "/*"
+        # After uploading new files, CDN still serves the OLD cached version.
+        # This purge tells CDN: "throw away your cache, fetch fresh files."
+        # Without this, your changes can take up to 4 hours to appear on the CDN URL.
+        # "/*" means purge ALL files (not just specific ones)
+
+      - name: Print live URL
+        run: |
+          echo "=================================================="
+          echo "🚀 Site deployed successfully!"
+          echo "Storage URL : https://${{ secrets.PORTFOLIO_STORAGE_ACCOUNT }}.z13.web.core.windows.net"
+          echo "CDN URL     : https://portfolio-endpoint.azureedge.net"
+          echo "Give it 1-2 minutes to propagate."
+          echo "=================================================="
+        # Shows you the live URL right in the Actions log after every deploy
