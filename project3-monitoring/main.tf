@@ -38,5 +38,6 @@ resource "azurerm_storage_account" "main" {
 
   tags = {
     environment = "monitoring"
+    project     = "monitoring"
   }
 }
