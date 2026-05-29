@@ -49,8 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-      working-directory: project3
-        #working-directory: project3-monitoring   # all commands run inside this folder
+        working-directory: project3-monitoring   # all commands run inside this folder
 
     steps:
       - name: Checkout code
@@ -90,7 +89,7 @@ jobs:
     if: github.event_name == 'pull_request'     # PRs only — not on direct pushes
     defaults:
       run:
-       working-directory: project3
+       working-directory: project3-monitoring
         #working-directory: project3-monitoring
 
     steps:
@@ -193,7 +192,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     defaults:
       run:
-        working-directory: project3
+        working-directory: project3-monitoring
 
     steps:
       - name: Checkout code
