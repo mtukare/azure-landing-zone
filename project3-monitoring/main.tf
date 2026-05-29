@@ -37,3 +37,7 @@ resource "azurerm_storage_account" "main" {
   }
 }
 
+
+resource "random_id" "sa_suffix" {
+  byte_length = 4
+}

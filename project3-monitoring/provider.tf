@@ -22,3 +22,7 @@ data "azurerm_client_config" "current" {}
 resource "random_id" "kv_suffix" {
   byte_length = 4
 }
+
+resource "random_id" "sa_suffix" {
+  byte_length = 4
+}
