@@ -4,5 +4,6 @@ terraform {
     storage_account_name = "sttfstate220526"
     container_name       = "tfstate"
     key                  = "landing-zone.tfstate"
+    use_azuread_auth     = true
   }
 }
