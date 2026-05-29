@@ -109,7 +109,7 @@ jobs:
 
       - name: Terraform Init (with remote backend)
         run: |
-          terraform init \
+          terraform init 
           
         # Each project has its own .tfstate file in the same Azure Blob container.
         # The key= value is what makes project3's state separate from project1's.
