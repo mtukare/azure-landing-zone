@@ -1,12 +1,317 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Madhuri Portfolio</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mtukare | Cloud & DevOps Engineer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      line-height: 1.6;
+    }
+
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Hero ── */
+    .hero {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 80px 24px 48px;
+      border-bottom: 1px solid #21262d;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: #1f6feb22;
+      border: 1px solid #1f6feb;
+      color: #58a6ff;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 700;
+      letter-spacing: -.02em;
+      margin-bottom: 12px;
+    }
+    .hero h1 span { color: #58a6ff; }
+    .hero p {
+      font-size: 18px;
+      color: #8b949e;
+      max-width: 520px;
+      margin-bottom: 28px;
+    }
+    .certs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cert {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #e6edf3;
+    }
+    .cert .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .dot-blue  { background: #58a6ff; }
+    .dot-green { background: #3fb950; }
+
+    /* ── Main content ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #8b949e;
+      margin: 48px 0 16px;
+    }
+
+    /* ── Projects ── */
+    .projects { display: grid; gap: 12px; }
+    .project-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 20px 22px;
+      transition: border-color .15s;
+    }
+    .project-card:hover { border-color: #58a6ff55; }
+    .project-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .project-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e6edf3;
+    }
+    .status {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-live    { background: #1a4731; color: #3fb950; border: 1px solid #3fb95044; }
+    .status-wip     { background: #2d1b00; color: #d29922; border: 1px solid #d2992244; }
+    .status-planned { background: #161b22; color: #8b949e; border: 1px solid #30363d; }
+    .project-desc {
+      font-size: 13px;
+      color: #8b949e;
+      margin-bottom: 12px;
+    }
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag {
+      font-size: 11px;
+      background: #1f2937;
+      color: #8b949e;
+      border: 1px solid #30363d;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    /* ── Stack ── */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .stack-item {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #e6edf3;
+    }
+    .stack-item .si-label {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 2px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid #21262d;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .footer-inner {
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    footer p { font-size: 13px; color: #8b949e; }
+    .gh-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #58a6ff;
+      background: #1f6feb1a;
+      border: 1px solid #1f6feb44;
+      border-radius: 6px;
+      padding: 6px 14px;
+    }
+    .deploy-note {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 6px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Madhuri Tukare</h1>
-  <p>Certifications: AZ-104, HashiCorp Terraform</p>
-  <p>Projects: Azure Landing Zone, CI/CD pipelines</p>
-  <p>GitHub: <a href="https://github.com/madhuritukare">madhuritukare</a></p>
+
+  <!-- ── HERO ─────────────────────────────── -->
+  <header class="hero">
+    <div class="hero-badge">Open to Work</div>
+    <h1>Hi, I'm <span>Mtukare</span> 👋</h1>
+    <p>Cloud & DevOps Engineer building production-grade Azure infrastructure with Terraform and GitHub Actions.</p>
+
+    <div class="certs">
+      <div class="cert"><span class="dot dot-blue"></span>AZ-104 — Azure Administrator</div>
+      <div class="cert"><span class="dot dot-green"></span>HashiCorp Terraform Associate</div>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ──────────────────────── -->
+  <main class="container">
+
+    <div class="section-title">Portfolio Projects</div>
+    <div class="projects">
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-name">01 — Azure Landing Zone</div>
+          <span class="status status-live">Live</span>
+        </div>
+        <p class="project-desc">Full IaC setup: Resource Group, VNet + Subnets, NSG, Storage Account, Key Vault. Deployed end-to-end via Terraform + GitHub Actions.</p>
+        <div class="tags">
+          <span class="tag">Terraform</span>
+          <span class="tag">Azure VNet</span>
+          <span class="tag">Key Vault</span>
+          <span class="tag">GitHub Actions</span>
+          <span class="tag">Remote State</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-name">02 — Multi-Environment Deployment</div>
+          <span class="status status-wip">In Progress</span>
+        </div>
+        <p class="project-desc">Same infra as Project 1 deployed across dev / staging / prod using Terraform workspaces and per-environment tfvars files.</p>
+        <div class="tags">
+          <span class="tag">Terraform Workspaces</span>
+          <span class="tag">tfvars</span>
+          <span class="tag">Multi-env</span>
+          <span class="tag">GitHub Actions</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-name">03 — Portfolio Site (This Page)</div>
+          <span class="status status-live">Live</span>
+        </div>
+        <p class="project-desc">Static site hosted on Azure Blob Storage with CDN. Terraform provisions infra; GitHub Actions auto-deploys HTML on every push to main.</p>
+        <div class="tags">
+          <span class="tag">Azure Blob Storage</span>
+          <span class="tag">Azure CDN</span>
+          <span class="tag">Static Website</span>
+          <span class="tag">CI/CD</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-name">04 — Governance & Policy</div>
+          <span class="status status-planned">Planned</span>
+        </div>
+        <p class="project-desc">Azure Policy definitions and assignments enforcing tagging, allowed regions, and SKU restrictions across the subscription.</p>
+        <div class="tags">
+          <span class="tag">Azure Policy</span>
+          <span class="tag">Terraform</span>
+          <span class="tag">Governance</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-name">05 — Reusable Terraform Modules</div>
+          <span class="status status-planned">Planned</span>
+        </div>
+        <p class="project-desc">Refactoring Projects 1–4 into reusable Terraform modules. Standardises resource creation across the entire portfolio.</p>
+        <div class="tags">
+          <span class="tag">Terraform Modules</span>
+          <span class="tag">DRY</span>
+          <span class="tag">Module Registry</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="section-title">Tech Stack</div>
+    <div class="stack-grid">
+      <div class="stack-item">☁️ Azure<div class="si-label">Cloud Platform</div></div>
+      <div class="stack-item">🏗️ Terraform<div class="si-label">IaC</div></div>
+      <div class="stack-item">⚙️ GitHub Actions<div class="si-label">CI/CD</div></div>
+      <div class="stack-item">🔐 Key Vault<div class="si-label">Secrets Mgmt</div></div>
+      <div class="stack-item">🌐 Azure CDN<div class="si-label">Content Delivery</div></div>
+      <div class="stack-item">📦 Blob Storage<div class="si-label">Object Store</div></div>
+    </div>
+
+  </main>
+
+  <!-- ── FOOTER ────────────────────────────── -->
+  <footer>
+    <div class="footer-inner">
+      <div>
+        <p>Built and deployed with Terraform + GitHub Actions</p>
+        <p class="deploy-note">Auto-deployed to Azure CDN · Part of the Azure Landing Zone portfolio</p>
+      </div>
+      <a class="gh-link" href="https://github.com/mtukare/azure-landing-zone" target="_blank">
+        <!-- GitHub SVG icon -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        GitHub Repo
+      </a>
+    </div>
+  </footer>
+
 </body>
 </html>
