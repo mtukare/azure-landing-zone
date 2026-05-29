@@ -33,7 +33,7 @@ permissions:
 jobs:
   terraform:
     name: "Terraform CI/CD"
-    uses: ./.github/workflows/terraform-reusable.yml    # calls the shared engine
+    uses: .github/workflows/terraform-reusable.yml    # calls the shared engine
     with:
       project_name: "Project01 - Landing Zone"
       working_directory: "project1-landing-zone"
