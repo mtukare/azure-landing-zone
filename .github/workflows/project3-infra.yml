@@ -1,0 +1,249 @@
+# ================================================================
+# .github/workflows/project3-infra.yml
+#
+# PROJECT 3 — Portfolio Static Site (INFRASTRUCTURE)
+# Provisions: Storage Account (static website) + CDN via Terraform
+#
+# WHEN does this run?
+#   - Push to main   → validate + apply  (infra gets created/updated)
+#   - Pull Request   → validate + plan   (see what will change, no apply)
+#
+# WHEN does this NOT run?
+#   - Pushing HTML/CSS files only → use project3-deploy.yml instead
+#   - Pushing to other projects   → paths filter prevents this
+#
+# Flow:  validate ──► plan (PR) ──► apply (main push)
+# ================================================================
+
+name: "Project03 — Portfolio Site (Infra)"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project3-monitoring/**/*.tf"          # only .tf file changes trigger infra pipeline
+      - "project3-monitoring/**/*.tfvars"       # variable file changes too
+      - ".github/workflows/project3-infra.yml" # or if this workflow file changes
+
+  pull_request:
+    branches: [main]
+    paths:
+      - "project3-monitoring/**/*.tf"
+      - "project3-monitoring/**/*.tfvars"
+      - ".github/workflows/project3-infra.yml"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write   # needed to post plan output as PR comment
+
+jobs:
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1 — VALIDATE
+  # No Azure connection needed. Checks syntax and formatting only.
+  # Runs on every push and PR. Fast — usually under 60 seconds.
+  # ──────────────────────────────────────────────────────────────
+  validate:
+    name: "Validate Terraform"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project3-monitoring   # all commands run inside this folder
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # Pulls your repo onto the GitHub runner machine
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+        # Installs exact version — prevents "works on my machine" issues
+
+      - name: Terraform Init (no backend)
+        run: terraform init -backend=false
+        # -backend=false skips connecting to Azure Blob for state.
+        # We only need local syntax checks here — no secrets needed.
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        # Fails if .tf files aren't properly formatted.
+        # To fix locally: run `terraform fmt -recursive` in project3-monitoring/
+
+      - name: Terraform Validate
+        run: terraform validate
+        # Checks variable references, resource arguments, and logic.
+        # Catches things like: wrong attribute names, missing required fields.
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2 — PLAN  (Pull Requests only)
+  # Connects to Azure and shows exactly what will be created/changed.
+  # Output is posted as a comment on your PR so reviewers can see it.
+  # ──────────────────────────────────────────────────────────────
+  plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    needs: validate                             # only runs if validate passed
+    if: github.event_name == 'pull_request'     # PRs only — not on direct pushes
+    defaults:
+      run:
+        working-directory: project3-monitoring
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (with remote backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=project3-monitoring.tfstate"
+        # Each project has its own .tfstate file in the same Azure Blob container.
+        # The key= value is what makes project3's state separate from project1's.
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -detailed-exitcode -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        # -no-color        : clean output in GitHub logs
+        # -detailed-exitcode: exit 0=no changes, 1=error, 2=has changes
+        # 2>&1 | tee       : captures ALL output (stdout + stderr) to file
+        continue-on-error: true   # don't stop — post the comment even if plan fails
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Post Plan as PR Comment
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('project3-monitoring/plan_output.txt', 'utf8');
+            } catch (e) {
+              planOutput = 'Could not read plan output.';
+            }
+            const maxLen = 60000;
+            const truncated = planOutput.length > maxLen
+              ? planOutput.substring(0, maxLen) + '\n\n... ⚠️ Output truncated'
+              : planOutput;
+            const exitCode = '${{ steps.plan.outputs.exit_code }}';
+            const status = exitCode === '0' ? '✅ No changes'
+                         : exitCode === '2' ? '⚠️ Changes detected'
+                         : '❌ Plan failed';
+            const body = [
+              '## 🏗️ Terraform Plan — `Project03 - Portfolio Site`',
+              `**Status:** ${status}`,
+              `**Commit:** \`${{ github.sha }}\``,
+              '',
+              '<details>',
+              '<summary>📋 Click to expand plan output</summary>',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '</details>'
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail job if plan errored
+        if: steps.plan.outputs.exit_code == '1'
+        run: exit 1
+        # Now we fail AFTER the comment was posted — so you can see why it failed
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 3 — APPLY  (main branch push only)
+  # Runs only after a PR is merged into main.
+  # Creates or updates the Storage Account + CDN in Azure.
+  # ──────────────────────────────────────────────────────────────
+  apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: project3-monitoring
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (with remote backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=project3-monitoring.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -no-color
+        # -auto-approve : required in CI — no human to type "yes"
+        # -no-color     : clean logs without escape characters
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      # After apply, print the CDN URL so you can see it right in the Actions log
+      - name: Print CDN URL
+        run: |
+          echo "=================================================="
+          echo "✅ Infra deployed successfully!"
+          echo "CDN URL: $(terraform output -raw cdn_endpoint_url 2>/dev/null || echo 'Add cdn_endpoint_url output to your main.tf')"
+          echo "=================================================="
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
