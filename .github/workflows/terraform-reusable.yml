@@ -40,12 +40,7 @@ on:
         required: true
       ARM_TENANT_ID:
         required: true
-      BACKEND_RESOURCE_GROUP:
-        required: true
-      BACKEND_STORAGE_ACCOUNT:
-        required: true
-      BACKEND_CONTAINER:
-        required: true
+      
 
 # Allow posting plan output as a PR comment
 permissions:
