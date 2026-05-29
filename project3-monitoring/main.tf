@@ -36,8 +36,3 @@ resource "azurerm_storage_account" "main" {
     error_404_document = "404.html"
   }
 }
-
-
-resource "random_id" "sa_suffix" {
-  byte_length = 4
-}
