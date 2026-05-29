@@ -4,6 +4,7 @@ resource "azurerm_resource_group" "landing_zone" {
 
   tags = {
     environment = "landing-zone"
+    project     = "landing-zone"
   }
 
 }
