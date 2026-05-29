@@ -35,4 +35,8 @@ resource "azurerm_storage_account" "main" {
     index_document     = "index.html"
     error_404_document = "404.html"
   }
+
+  tags = {
+    environment = "monitoring"
+  }
 }
