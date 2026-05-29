@@ -49,6 +49,7 @@ on:
 
 # Allow posting plan output as a PR comment
 permissions:
+  id-token: write
   contents: read
   pull-requests: write
 
