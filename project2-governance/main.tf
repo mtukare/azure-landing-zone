@@ -68,6 +68,7 @@ resource "azurerm_storage_account" "main" {
   # dev=LRS (cheapest, single datacenter)
   # prod=GRS (geo-redundant, survives regional outage)
   tags = local.common_tags
+  #test test test
 }
 
 
