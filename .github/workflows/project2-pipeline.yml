@@ -1,0 +1,389 @@
+# ==============================================================
+# .github/workflows/project2-pipeline.yml
+#
+# PROJECT 02 — Multi-environment deployment (dev / staging / prod)
+#
+# REPO STRUCTURE THIS EXPECTS:
+#   project2-governance/
+#   ├── main.tf
+#   ├── variables.tf
+#   ├── backend.tf
+#   ├── outputs.tf
+#   └── envs/
+#       ├── dev.tfvars
+#       ├── staging.tfvars
+#       └── prod.tfvars
+#
+# BRANCH → ENVIRONMENT MAP:
+#   dev     → workspace: dev     → rg-dev-p2     in Azure
+#   staging → workspace: staging → rg-staging-p2 in Azure
+#   main    → workspace: prod    → rg-prod-p2    in Azure
+#
+# TRIGGER LOGIC:
+#   push to dev/staging/main + .tf change  → validate + apply
+#   pull_request to any of those branches  → validate + plan (no apply)
+#
+# WHY THIS IS STANDALONE (not using _terraform-reusable.yml):
+#   The reusable workflow has no concept of workspaces or -var-file.
+#   Multi-env requires workspace select + var-file on EVERY terraform
+#   command. It's cleaner and clearer to keep this self-contained.
+# ==============================================================
+
+name: "Project02 — Multi-Environment"
+
+on:
+  push:
+    branches: [dev, staging, main]
+    paths:
+      - "project2-governance/**"                        # any file in this project
+      - ".github/workflows/project2-pipeline.yml"      # or this workflow itself
+
+  pull_request:
+    branches: [dev, staging, main]
+    paths:
+      - "project2-governance/**"
+      - ".github/workflows/project2-pipeline.yml"
+
+permissions:
+  contents: read
+  pull-requests: write    # needed to post plan output as a PR comment
+
+# If two pushes happen quickly to the same branch, cancel the older run.
+# Prevents two deploys racing to the same Azure environment simultaneously.
+concurrency:
+  group: "project2-${{ github.ref }}"
+  cancel-in-progress: true
+
+# ==============================================================
+# JOBS
+# ==============================================================
+jobs:
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: RESOLVE ENVIRONMENT
+  # Reads the branch name and decides: which workspace? which tfvars?
+  # Outputs these values — every other job reads them via needs.*
+  # ─────────────────────────────────────────────────────────────
+  resolve-env:
+    name: "Resolve Target Environment"
+    runs-on: ubuntu-latest
+
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+      tfvars_file: ${{ steps.map.outputs.tfvars_file }}
+
+    steps:
+      - name: Map branch → environment
+        id: map
+        run: |
+          # For push events, use github.ref
+          # For pull_request events, use github.base_ref (the target branch)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+          else
+            BRANCH="${{ github.ref_name }}"
+          fi
+
+          case "$BRANCH" in
+            main)    ENV="prod"    ;;
+            staging) ENV="staging" ;;
+            *)       ENV="dev"     ;;
+          esac
+
+          TFVARS="envs/${ENV}.tfvars"
+
+          echo "environment=$ENV"   >> $GITHUB_OUTPUT
+          echo "tfvars_file=$TFVARS" >> $GITHUB_OUTPUT
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Branch    : $BRANCH"
+          echo "  Event     : ${{ github.event_name }}"
+          echo "  → ENV     : $ENV"
+          echo "  → TFVARS  : $TFVARS"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: VALIDATE
+  # No Azure connection. Checks syntax + formatting only.
+  # Runs on every push and PR. Fast (~30-60 seconds).
+  # ─────────────────────────────────────────────────────────────
+  validate:
+    name: "Validate [${{ needs.resolve-env.outputs.environment }}]"
+    runs-on: ubuntu-latest
+    needs: resolve-env
+    defaults:
+      run:
+        working-directory: project2-governance   # all commands run in this folder
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Init (no backend — local syntax check only)
+        run: terraform init -backend=false
+        # -backend=false skips remote state connection.
+        # We only need local .tf file validation here — no secrets needed.
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        # Fails if any .tf file needs formatting.
+        # FIX LOCALLY: cd project2-governance && terraform fmt -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+        # Validates variable references, resource arguments, module calls.
+
+      - name: Check tfvars file exists
+        run: |
+          FILE="${{ needs.resolve-env.outputs.tfvars_file }}"
+          if [[ ! -f "$FILE" ]]; then
+            echo "❌ ERROR: $FILE not found in project2-governance/"
+            exit 1
+          fi
+          echo "✅ Found: $FILE"
+        # Catches the case where someone pushes to dev but forgot to create dev.tfvars
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3: PLAN  (Pull Requests only)
+  # Connects to Azure, selects workspace, runs plan with correct tfvars.
+  # Posts the full plan output as a PR comment so reviewers see
+  # exactly what infrastructure will change before approving.
+  # ─────────────────────────────────────────────────────────────
+  plan:
+    name: "Plan [${{ needs.resolve-env.outputs.environment }}]"
+    runs-on: ubuntu-latest
+    needs: [resolve-env, validate]
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: project2-governance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (connect to remote state backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=project2.tfstate"
+          # All 3 environments share ONE key — Terraform workspaces
+          # automatically namespace it:
+          # dev     → project2.tfstate/env:/dev/terraform.tfstate
+          # staging → project2.tfstate/env:/staging/terraform.tfstate
+          # prod    → project2.tfstate/env:/prod/terraform.tfstate
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Select or Create Terraform Workspace
+        run: |
+          ENV="${{ needs.resolve-env.outputs.environment }}"
+          # Try to select — if workspace doesn't exist yet, create it
+          # First time running: `select` fails → `new` creates it
+          # Every time after: `select` works → `new` is skipped
+          terraform workspace select "$ENV" 2>/dev/null || terraform workspace new "$ENV"
+          echo "✅ Active workspace: $(terraform workspace show)"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="${{ needs.resolve-env.outputs.tfvars_file }}" \
+            -no-color \
+            -detailed-exitcode \
+            -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        # -var-file      → injects dev/staging/prod values
+        # -detailed-exitcode → 0=no changes, 1=error, 2=changes present
+        # tee            → output goes to log AND file (for PR comment)
+        continue-on-error: true   # post comment even if plan fails
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Post Plan as PR Comment
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs   = require('fs');
+            const env  = '${{ needs.resolve-env.outputs.environment }}';
+            const code = '${{ steps.plan.outputs.exit_code }}';
+
+            // Environment indicator — green for dev, yellow for staging, red for prod
+            const badge = env === 'prod'    ? '🔴 prod'
+                        : env === 'staging' ? '🟡 staging'
+                        :                    '🟢 dev';
+
+            const status = code === '0' ? '✅ No changes — infra is up to date'
+                         : code === '2' ? '⚠️ Changes detected — review before merging'
+                         :               '❌ Plan failed — see output below';
+
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('project2-governance/plan_output.txt', 'utf8');
+            } catch (e) {
+              planOutput = '⚠️ Could not read plan output file.';
+            }
+
+            // GitHub comments cap at ~65KB
+            if (planOutput.length > 60000) {
+              planOutput = planOutput.substring(0, 60000) + '\n\n... ⚠️ Truncated (too large)';
+            }
+
+            const body = [
+              `## 🏗️ Terraform Plan — Project02 ${badge}`,
+              `**Status:** ${status}`,
+              `**Workspace:** \`${env}\``,
+              `**Commit:** \`${{ github.sha }}\``,
+              '',
+              '<details>',
+              '<summary>📋 Click to expand plan output</summary>',
+              '',
+              '```hcl',
+              planOutput,
+              '```',
+              '</details>'
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              body
+            });
+
+      - name: Fail job if plan errored
+        if: steps.plan.outputs.exit_code == '1'
+        run: |
+          echo "❌ Plan returned exit code 1 (error). See PR comment for details."
+          exit 1
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 4: APPLY  (Push to branch only — NOT on pull requests)
+  # Selects workspace, applies with correct tfvars.
+  # Uses GitHub Environments for approval gating on prod.
+  # ─────────────────────────────────────────────────────────────
+  apply:
+    name: "Apply [${{ needs.resolve-env.outputs.environment }}]"
+    runs-on: ubuntu-latest
+    needs: [resolve-env, validate]
+    if: github.event_name == 'push'
+
+    # This `environment:` key is what enables the approval gate in GitHub.
+    # Go to Repo → Settings → Environments → create dev, staging, prod.
+    # On prod: add yourself as a Required Reviewer.
+    # Then every push to main will PAUSE here until you click Approve.
+    environment: ${{ needs.resolve-env.outputs.environment }}
+
+    defaults:
+      run:
+        working-directory: project2-governance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform 1.7.5
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (connect to remote state backend)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=project2.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Select or Create Terraform Workspace
+        run: |
+          ENV="${{ needs.resolve-env.outputs.environment }}"
+          terraform workspace select "$ENV" 2>/dev/null || terraform workspace new "$ENV"
+          echo "✅ Active workspace: $(terraform workspace show)"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Print deploy summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  🚀 DEPLOYING TO: ${{ needs.resolve-env.outputs.environment }}"
+          echo "  📄 Var file    : ${{ needs.resolve-env.outputs.tfvars_file }}"
+          echo "  🔀 Workspace   : $(terraform workspace show)"
+          echo "  📝 Commit      : ${{ github.sha }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Terraform Apply
+        run: |
+          terraform apply \
+            -var-file="${{ needs.resolve-env.outputs.tfvars_file }}" \
+            -auto-approve \
+            -no-color
+        # -var-file    → injects the right values for this environment
+        # -auto-approve → no interactive "yes" prompt (required in CI)
+        # -no-color    → clean logs without escape characters
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Show deployed outputs
+        run: terraform output -no-color
+        # Prints resource names, VNet ranges, Key Vault URIs to Actions log.
+        # Confirms the correct environment was deployed.
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
