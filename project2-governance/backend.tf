@@ -44,7 +44,6 @@ locals {
   # Merged tags applied to every resource
   common_tags = merge(var.tags, {
     environment = var.env
-    project     = "project2-multi-env"
     managed_by  = "terraform"
     workspace   = terraform.workspace # records which workspace created this
   })
