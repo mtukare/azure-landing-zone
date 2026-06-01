@@ -45,6 +45,7 @@ on:
       - ".github/workflows/project2-pipeline.yml"
 
 permissions:
+  id-token: write
   contents: read
   pull-requests: write    # needed to post plan output as a PR comment
 
