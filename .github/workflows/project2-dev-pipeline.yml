@@ -1,5 +1,5 @@
 # ==============================================================
-# .github/workflows/project2-pipeline.yml
+# .github/workflows/project2-dev-pipeline.yml
 #
 # PROJECT 02 — Multi-environment deployment (dev / staging / prod)
 #
@@ -36,13 +36,13 @@ on:
     branches: [dev, staging, main]
     paths:
       - "project2-governance/**"                        # any file in this project
-      - ".github/workflows/project2-pipeline.yml"      # or this workflow itself
+      - ".github/workflows/project2-dev-pipeline.yml"      # or this workflow itself
 
   pull_request:
     branches: [dev, staging, main]
     paths:
       - "project2-governance/**"
-      - ".github/workflows/project2-pipeline.yml"
+      - ".github/workflows/project2-dev-pipeline.yml"
 
 permissions:
   id-token: write
@@ -194,7 +194,7 @@ jobs:
             -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
             -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
             -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
-            -backend-config="key=project2.tfstate"
+            -backend-config="key=dev/project2.tfstate"
           # All 3 environments share ONE key — Terraform workspaces
           # automatically namespace it:
           # dev     → project2.tfstate/env:/dev/terraform.tfstate
@@ -337,10 +337,10 @@ jobs:
       - name: Terraform Init (connect to remote state backend)
         run: |
           terraform init \
-            -backend-config="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
+            -="resource_group_name=${{ secrets.BACKEND_RESOURCE_GROUP }}" \
+            -="storage_account_name=${{ secrets.BACKEND_STORAGE_ACCOUNT }}" \
             -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
-            -backend-config="key=project2.tfstate"
+            -backend-config="key=dev/project2.tfstate"
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
