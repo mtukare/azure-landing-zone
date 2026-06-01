@@ -6,6 +6,7 @@ resource "azurerm_resource_group" "main" {
   tags     = local.common_tags
   # Result: rg-dev-p2, rg-staging-p2, rg-prod-p2
   # All three can exist simultaneously in Azure — no name collision
+  #test trigger
 }
 
 # ── Virtual Network ──────────────────────────────────────────────
