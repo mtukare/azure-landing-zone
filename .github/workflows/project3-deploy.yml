@@ -26,6 +26,7 @@ on:
       - ".github/workflows/project3-deploy.yml"  # or if this workflow changes
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
@@ -50,6 +51,7 @@ jobs:
           client-id: ${{ secrets.ARM_CLIENT_ID }}
           tenant-id: ${{ secrets.ARM_TENANT_ID }}
           subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          auth-type: SERVICE_PRINCIPAL
         # Authenticates to Azure so we can run az storage commands
 
       - name: Upload site files to Azure Blob
