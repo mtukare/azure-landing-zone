@@ -2,7 +2,7 @@
 
 A static portfolio website automatically deployed to **Azure Blob Storage** with **Azure CDN** for global delivery. Infrastructure provisioned by Terraform. Content deployed by a dedicated GitHub Actions pipeline on every push.
 
-**Live site:** https://portfolio-endpoint.azureedge.net
+**Live site:** (https://portfolio-endpoint-abheh9gtanhqguby.z01.azurefd.net)
 
 ---
 
@@ -24,7 +24,7 @@ A static portfolio website automatically deployed to **Azure Blob Storage** with
 Visitor's browser
        │
        ▼
-https://portfolio-endpoint.azureedge.net   (CDN URL — on your resume)
+[https://portfolio-endpoint.azureedge.net ](https://portfolio-endpoint-abheh9gtanhqguby.z01.azurefd.net)  
        │
        ▼
 Azure CDN (Standard Microsoft)
