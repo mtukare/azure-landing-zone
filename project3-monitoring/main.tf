@@ -1,43 +1,5 @@
-resource "azurerm_resource_group" "landing_zone" {
-  name     = "rg-landing-zone"
+resource "azurerm_resource_group" "main" {
+  name     = "rg-portfolio-site"
   location = var.location
-
-
 }
 
-
-module "networking" {
-  source              = "./modules/networking"
-  resource_group_name = azurerm_resource_group.landing_zone.name
-  location            = var.location
-  vnet_address_space  = var.vnet_address_space
-
-}
-
-resource "azurerm_key_vault" "main" {
-  name                = "kv-portfolio-${random_id.kv_suffix.hex}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.landing_zone.name
-  tenant_id           = data.azurerm_client_config.current.tenant_id
-  sku_name            = "standard"
-
-
-}
-
-resource "azurerm_storage_account" "main" {
-  name                     = "stlandingzone${random_id.sa_suffix.hex}"
-  resource_group_name      = azurerm_resource_group.landing_zone.name
-  location                 = var.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-
-  static_website {
-    index_document     = "index.html"
-    error_404_document = "404.html"
-  }
-
-  tags = {
-    environment = "monitoring"
-    project     = "monitoring"
-  }
-}
