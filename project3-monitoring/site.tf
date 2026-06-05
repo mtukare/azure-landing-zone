@@ -4,6 +4,10 @@ resource "azurerm_storage_account" "site" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
   location                 = var.location
+
+  # ADD THESE TWO
+  allow_nested_items_to_be_public = true
+  https_traffic_only_enabled      = false
 }
 
 
@@ -50,7 +54,7 @@ resource "azurerm_cdn_frontdoor_route" "main" {
   cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.main.id]
   supported_protocols           = ["Https", "Http"]
   patterns_to_match             = ["/*"]
-  forwarding_protocol           = "HttpsOnly"
+  forwarding_protocol           = "HttpOnly"
   https_redirect_enabled        = true
   enabled                       = true
 }
