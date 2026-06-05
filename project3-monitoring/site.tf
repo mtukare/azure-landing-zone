@@ -5,7 +5,7 @@ resource "azurerm_storage_account" "site" {
   account_replication_type = "LRS"
   location                 = var.location
 
-    # ADD THESE TWO
+  # ADD THESE TWO
   allow_nested_items_to_be_public = true
   https_traffic_only_enabled      = false
 }
