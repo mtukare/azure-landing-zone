@@ -1,0 +1,101 @@
+name: Terraform Governance CI/CD
+
+# Runs on PRs (plan only) and pushes to main (plan + apply)
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  # These are read from GitHub Secrets — never hardcode real values
+  ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+  TF_VERSION:          "1.7.5"
+
+permissions:
+  contents: read
+  pull-requests: write   # needed to post plan output as a PR comment
+
+jobs:
+  terraform:
+    name: Terraform Plan & Apply
+    runs-on: ubuntu-latest  # FREE — GitHub-hosted runner
+
+    steps:
+
+      # ── Step 1: Checkout your code ──────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Step 2: Install Terraform ────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── Step 3: terraform init ───────────────────────────────────────────────
+      # Connects to your Azure Storage remote backend to read/write tfstate.
+      # The ARM_* env vars above authenticate automatically — no extra login step needed.
+      - name: Terraform Init
+        run: terraform init
+
+      # ── Step 4: Format check ─────────────────────────────────────────────────
+      # Fails if any .tf file isn't properly formatted.
+      # Run `terraform fmt -recursive` locally to fix before pushing.
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      # ── Step 5: Validate ─────────────────────────────────────────────────────
+      - name: Terraform Validate
+        run: terraform validate
+
+      # ── Step 6: Plan ─────────────────────────────────────────────────────────
+      # Always runs. Output saved to file so we can post it as a PR comment.
+      # reader_principal_id and contributor_principal_id are Object IDs of
+      # Azure AD users/groups — store them as secrets, not hardcoded.
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="reader_principal_id=${{ secrets.READER_PRINCIPAL_ID }}" \
+            -var="contributor_principal_id=${{ secrets.CONTRIBUTOR_PRINCIPAL_ID }}" \
+            -out=tfplan \
+            -no-color 2>&1 | tee plan_output.txt
+        continue-on-error: true
+
+      # ── Step 7: Post plan as PR comment (PR only) ────────────────────────────
+      # Reviewers can see exactly what will change before approving the merge.
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('plan_output.txt', 'utf8');
+            const maxLen = 60000;
+            const output = plan.length > maxLen
+              ? plan.substring(0, maxLen) + '\n\n...[truncated — see Actions log for full output]'
+              : plan;
+            const icon = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ${icon} Terraform Plan — Governance Project\n\n<details><summary>Click to expand</summary>\n\n\`\`\`hcl\n${output}\n\`\`\`\n</details>`
+            });
+
+      # ── Step 8: Stop here if plan failed ────────────────────────────────────
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      # ── Step 9: Apply (main branch only) ────────────────────────────────────
+      # Only runs after a merge to main. Uses the exact plan from step 6.
+      # -auto-approve is safe here because the plan was reviewed in the PR.
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
