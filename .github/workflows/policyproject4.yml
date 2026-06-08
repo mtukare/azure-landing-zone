@@ -64,7 +64,7 @@ jobs:
             -var="contributor_principal_id=${{ secrets.CONTRIBUTOR_PRINCIPAL_ID }}" \
             -out=tfplan \
             -no-color 2>&1 | tee plan_output.txt
-        working-directory: ./azure-landing-zone/project4-policy-RBAC/
+        working-directory: ./azure-landing-zone/project4-policy-RBAC
         continue-on-error: true
 
       # ── Step 7: Post plan as PR comment (PR only) ────────────────────────────
@@ -100,6 +100,6 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
-        working-directory: ./azure-landing-zone/project4-policy-RBAC/
+        working-directory: ./azure-landing-zone/project4-policy-RBAC
 
 
