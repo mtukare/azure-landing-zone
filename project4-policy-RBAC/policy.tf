@@ -95,11 +95,10 @@ resource "azurerm_policy_set_definition" "governance" {
 
 #policy assignment to apply the initiative to the resource group
 
-resource "azurerm_policy_assignment" "governance" {
-
-  name                     = "governance-assignment"
-  scope                    = azurerm_resource_group.main.id
-  policy_set_definition_id = azurerm_policy_set_definition.governance.id
+resource "azurerm_resource_group_policy_assignment" "governance" {
+  name                 = "governance-assignment"
+  resource_group_id    = azurerm_resource_group.main.id
+  policy_definition_id = azurerm_policy_set_definition.governance.id
 
   display_name = "Governance Initiative Assignment"
   description  = "Enforces mandatory tags and restricts resource deployment to specific regions."
