@@ -98,4 +98,6 @@ jobs:
       # -auto-approve is safe here because the plan was reviewed in the PR.
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve \
+           -var="reader_principal_id=${{ secrets.READER_PRINCIPAL_ID }}" \
+           -var="contributor_principal_id=${{ secrets.CONTRIBUTOR_PRINCIPAL_ID }}"
