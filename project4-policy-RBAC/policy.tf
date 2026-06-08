@@ -97,12 +97,12 @@ resource "azurerm_policy_set_definition" "governance" {
 
 resource "azurerm_policy_assignment" "governance" {
 
-  name                 = "governance-assignment"
-  scope                = azurerm_resource_group.main.id
+  name                     = "governance-assignment"
+  scope                    = azurerm_resource_group.main.id
   policy_set_definition_id = azurerm_policy_set_definition.governance.id
 
-  display_name         = "Governance Initiative Assignment"
-  description          = "Enforces mandatory tags and restricts resource deployment to specific regions."
+  display_name = "Governance Initiative Assignment"
+  description  = "Enforces mandatory tags and restricts resource deployment to specific regions."
 }
 
 
