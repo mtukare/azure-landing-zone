@@ -10,6 +10,7 @@ resource "azurerm_resource_group" "main" {
     Owner       = "CloudTeam"
     Application = "Governance"
     CostCenter  = "IT"
+    project     = "PolicyRBAC"
   }
 }
 
